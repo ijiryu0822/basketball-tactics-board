@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>バスケットボール作戦板（スマホ特化版）</title>
+    <style>
+        /* === スマホ特化のベースリセット === */
+        :root {
+            --bg-color: #0f172a;
+            --header-bg: #1e293b;
+            --btn-bg: #334155;
+            --btn-active: #2563eb;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100dvh; /* スマホのアドレスバー対策 */
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            touch-action: none; /* ピンチズーム禁止 */
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* === ヘッダー / ツールバー === */
+        .app-header {
+            width: 100%;
+            height: 56px;
+            background-color: var(--header-bg);
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            box-sizing: border-box;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            flex-shrink: 0;
+            gap: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+        
+        .app-header::-webkit-scrollbar { display: none; } /* スクロールバー非表示 */
+
+        .title {
+            font-size: 16px;
+            font-weight: 800;
+            margin-right: 4px;
+        }
+
+        .tool-group {
+            display: flex;
+            background-color: var(--btn-bg);
+            border-radius: 8px;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        button {
+            appearance: none;
+            border: none;
+            background: transparent;
+            color: #cbd5e1;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button.active {
+            background-color: var(--btn-active);
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* カラーボタン */
+        .color-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            padding: 0;
+            border: 2px solid transparent;
+        }
+        .color-btn.active {
+            transform: scale(1.1);
+            border-color: white;
+        }
+        .color-btn.black-active {
+            border-color: #94a3b8; /* 黒を選んだ時の枠線 */
+        }
+
+        /* アクションボタン（戻す・消すなど） */
+        .action-btn { background-color: #475569; color: white; }
+        .danger-btn { background-color: #991b1b; color: #fca5a5; }
+
+        .divider {
+            width: 1px;
+            height: 24px;
+            background-color: #475569;
+            margin: auto 4px;
+        }
+
+        /* === メインエリア (コートを中央に配置) === */
+        .main-area {
+            flex: 1;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 8px; /* コートの外側の余白 */
+            box-sizing: border-box;
+            overflow: hidden; /* はみ出しを確実に防ぐ */
+        }
+
+        /* === コートコンテナ === */
+        #courtContainer {
+            position: relative;
+            background-color: #fef08a; /* デフォルト薄黄色 */
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            border-radius: 4px;
+            overflow: hidden;
+            /* サイズはJSで完璧な28:15に計算して付与します */
+        }
+
+        /* SVGの描画領域（FIBA基準: 280x150） */
+        #courtSvg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; /* タッチイベントは後ろへ流す */
+            stroke: #0f172a; /* デフォルト黒線 */
+        }
+
+        /* キャンバス（手書き用） */
+        #drawingCanvas {
+            position: absolute;
+            top: 0; left: 0;
+            z-index: 20;
+            pointer-events: none; /* 初期はMoveモードなので無効 */
+            touch-action: none;
+        }
+
+        /* 駒の配置レイヤー */
+        #tokensLayer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 30;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        /* === 駒 (選手・ボール) === */
+        .token {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            border: 2px solid rgba(255,255,255,0.9);
+            z-index: 10;
+            transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
+        }
+
+        .token.ball {
+            width: 26px; height: 26px;
+            background: radial-gradient(circle at 30% 30%, #fb923c, #c2410c);
+            color: transparent;
+            border: 1px solid rgba(255,255,255,0.8);
+            z-index: 15;
+        }
+
+        /* ドラッグ中（指で隠れないよう上へシフト） */
+        .token.dragging {
+            /* スマホで指の腹に隠れないよう、上に60pxずらして拡大 */
+            transform: translate(-50%, calc(-50% - 60px)) scale(1.3);
+            box-shadow: 0 15px 25px rgba(0,0,0,0.6);
+            z-index: 50;
+        }
+
+        /* リモートドラッグ用（ダブルタップ選択状態） */
+        .token.selected {
+            transform: translate(-50%, -50%) scale(1.15);
+            box-shadow: 0 10px 20px rgba(250, 204, 21, 0.6);
+            outline: 4px solid #facc15;
+            outline-offset: 2px;
+            z-index: 40;
+        }
+
+        /* === 縦画面警告 (スマホ特化) === */
+        #portraitWarning {
+            position: fixed; inset: 0; z-index: 999;
+            background-color: var(--bg-color);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; text-align: center;
+            padding: 20px;
+        }
+        @media (orientation: landscape) {
+            #portraitWarning { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 縦画面時の警告 -->
+    <div id="portraitWarning">
+        <div style="font-size: 60px; margin-bottom: 20px;">🔄</div>
+        <h2 style="margin: 0 0 10px 0;">横向きにしてください</h2>
+        <p style="color: #94a3b8; font-size: 14px; margin-bottom: 30px;">作戦板は横画面（ランドスケープ）に特化しています。<br>スマホを横に持ち替えてください。</p>
+        <button style="background: var(--btn-active); padding: 12px 24px; border-radius: 99px;" onclick="document.getElementById('portraitWarning').style.display='none'">そのまま使う</button>
+    </div>
+
+    <!-- ヘッダー / ツールバー -->
+    <header class="app-header">
+        <div class="title">🏀 作戦板</div>
+        
+        <!-- メインモード -->
+        <div class="tool-group">
+            <button id="mode-move" class="active" onclick="setMode('move')">👆 移動</button>
+            <button id="mode-draw" onclick="setMode('draw')">✏️ 描く</button>
+            <button id="mode-erase" onclick="setMode('erase')">🧽 消す</button>
+        </div>
+
+        <!-- 見た目設定 (移動モード時のみ表示) -->
+        <div id="setting-tools" class="tool-group">
+            <button onclick="toggleCourtColor()" id="btn-court">床: 黄色</button>
+            <button onclick="toggleLineColor()" id="btn-line">線: 黒</button>
+        </div>
+
+        <!-- 描画設定 (描く・消すモード時のみ表示) -->
+        <div id="draw-tools" class="tool-group" style="display: none;">
+            <button class="color-btn active" style="background-color: #ef4444;" onclick="setPenColor('#ef4444', this)"></button>
+            <button class="color-btn" style="background-color: #3b82f6;" onclick="setPenColor('#3b82f6', this)"></button>
+            <button class="color-btn" style="background-color: #22c55e;" onclick="setPenColor('#22c55e', this)"></button>
+            <button class="color-btn" style="background-color: #ffffff;" onclick="setPenColor('#ffffff', this)"></button>
+            <button class="color-btn" style="background-color: #0f172a;" onclick="setPenColor('#0f172a', this)"></button>
+            
+            <div class="divider"></div>
+            
+            <button id="style-solid-arrow" class="active" onclick="setLineStyle('solid-arrow', this)">➔ 実線</button>
+            <button id="style-dotted-arrow" onclick="setLineStyle('dotted-arrow', this)">⇢ 点線</button>
+            <button id="style-solid-line" onclick="setLineStyle('solid-line', this)">━ 線</button>
+            <button id="style-dotted-line" onclick="setLineStyle('dotted-line', this)">┉ 線</button>
+
+            <div class="divider"></div>
+            
+            <button class="action-btn" onclick="undoPath()">↩️ 戻す</button>
+            <button class="action-btn danger-btn" onclick="clearCanvas()">🗑 クリア</button>
+        </div>
+    </header>
+
+    <!-- メイン表示エリア -->
+    <main class="main-area" id="mainArea">
+        <div id="courtContainer">
+            <!-- 28m x 15m のFIBA比率コート -->
+            <svg id="courtSvg" viewBox="0 0 280 150">
+                <!-- センターライン -->
+                <line x1="140" y1="0" x2="140" y2="150" stroke-width="1.5" stroke="inherit"/>
+                <!-- センターサークル -->
+                <circle cx="140" cy="75" r="18" fill="none" stroke-width="1.5" stroke="inherit"/>
+                
+                <!-- 左コート -->
+                <!-- ペイントエリア -->
+                <rect class="paint-area" x="0" y="50.5" width="58" height="49" fill="#fde047" stroke-width="1.5" stroke="inherit"/>
+                <!-- 3ポイントライン (フリースロー中央 15.75,75 から半径67.5) -->
+                <path d="M 0 9 L 29.9 9 A 67.5 67.5 0 0 1 29.9 141 L 0 141" fill="none" stroke-width="1.5" stroke="inherit"/>
+                <!-- ゴール・バックボード -->
+                <line x1="12" y1="65" x2="12" y2="85" stroke-width="2" stroke="inherit"/>
+                <circle class="ring" cx="15.75" cy="75" r="3.75" fill="none" stroke-width="1.5" stroke="#ea580c"/>
+
+                <!-- 右コート -->
+                <rect class="paint-area" x="222" y="50.5" width="58" height="49" fill="#fde047" stroke-width="1.5" stroke="inherit"/>
+                <path d="M 280 9 L 250.1 9 A 67.5 67.5 0 0 0 250.1 141 L 280 141" fill="none" stroke-width="1.5" stroke="inherit"/>
+                <line x1="268" y1="65" x2="268" y2="85" stroke-width="2" stroke="inherit"/>
+                <circle class="ring" cx="264.25" cy="75" r="3.75" fill="none" stroke-width="1.5" stroke="#ea580c"/>
+            </svg>
+
+            <!-- 描画レイヤー -->
+            <canvas id="drawingCanvas"></canvas>
+            <!-- 駒配置レイヤー -->
+            <div id="tokensLayer"></div>
+        </div>
+    </main>
+
+    <script>
+        // --- 状態管理 ---
+        let currentMode = 'move';
+        let penColor = '#ef4444';
+        let lineStyle = 'solid-arrow';
+        let paths = [];
+        let currentPath = null;
+        let isWood = false;
+        let isWhiteLine = false;
+
+        const mainArea = document.getElementById('mainArea');
+        const container = document.getElementById('courtContainer');
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const tokensLayer = document.getElementById('tokensLayer');
+
+        // ご指定の初期配置（パーセンテージ）
+        const initialTokens = [
+            { id: 'b1', type: 'player', team: 'blue', label: '1', x: 74, y: 52 },
+            { id: 'b2', type: 'player', team: 'blue', label: '2', x: 50, y: 16 },
+            { id: 'b3', type: 'player', team: 'blue', label: '3', x: 60, y: 82 },
+            { id: 'b4', type: 'player', team: 'blue', label: '4', x: 16, y: 90 },
+            { id: 'b5', type: 'player', team: 'blue', label: '5', x: 24, y: 70 },
+            { id: 'r1', type: 'player', team: 'red', label: '1', x: 64, y: 52 },
+            { id: 'r2', type: 'player', team: 'red', label: '2', x: 41, y: 28 },
+            { id: 'r3', type: 'player', team: 'red', label: '3', x: 42, y: 63 },
+            { id: 'r4', type: 'player', team: 'red', label: '4', x: 20, y: 80 },
+            { id: 'r5', type: 'player', team: 'red', label: '5', x: 25, y: 57 },
+            { id: 'ball', type: 'ball', label: '', x: 70, y: 46 }
+        ];
+
+        function init() {
+            createTokens();
+            setupDrawingEvents();
+            tokensLayer.addEventListener('pointerdown', onLayerPointerDown);
+            
+            const performResize = () => requestAnimationFrame(resizeCourt);
+
+            // リサイズ監視（完璧なアスペクト比を維持）
+            const resizeObserver = new ResizeObserver(performResize);
+            resizeObserver.observe(mainArea);
+            
+            // 初回ロード時のブラウザUI（アドレスバー等）の変動対策として、時間差で何度かサイズ計算を行う
+            performResize();
+            setTimeout(performResize, 100);
+            setTimeout(performResize, 500);
+
+            // 画面の回転時にも確実にサイズを再計算
+            window.addEventListener('orientationchange', () => {
+                setTimeout(performResize, 200);
+                setTimeout(performResize, 500);
+            });
+        }
+
+        // --- スマホ特化の完璧なレイアウト計算 ---
+        function resizeCourt() {
+            const rect = mainArea.getBoundingClientRect();
+            // 余白(padding分)を引いた実質エリア
+            const availableW = rect.width - 16;
+            const availableH = rect.height - 16;
+            if(availableW <= 0 || availableH <= 0) return;
+
+            // バスケコート比率 28 : 15
+            const aspect = 28 / 15;
+            let targetW = availableW;
+            let targetH = targetW / aspect;
+
+            // 高さが画面を超えてしまう場合は、高さ基準に計算し直す
+            if (targetH > availableH) {
+                targetH = availableH;
+                targetW = targetH * aspect;
+            }
+
+            // 描画のブレを防ぐためにピクセルを整数化
+            targetW = Math.floor(targetW);
+            targetH = Math.floor(targetH);
+
+            container.style.width = `${targetW}px`;
+            container.style.height = `${targetH}px`;
+            
+            updateCanvasSize(targetW, targetH);
+        }
+
+        function updateCanvasSize(w, h) {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = `${w}px`;
+            canvas.style.height = `${h}px`;
+            canvas.cssWidth = w;
+            canvas.cssHeight = h;
+            ctx.scale(dpr, dpr);
+            redrawCanvas();
+        }
+
+        // --- 駒の操作（フロート＆リモートドラッグ） ---
+        let activeToken = null;
+        let selectedToken = null;
+        let remoteDrag = null;
+        let lastTapTime = 0;
+        let lastTapTarget = null;
+
+        function createTokens() {
+            tokensLayer.innerHTML = '';
+            initialTokens.forEach(data => {
+                const el = document.createElement('div');
+                el.className = `token ${data.type}`;
+                if (data.type === 'player') {
+                    el.innerText = data.label;
+                    el.style.backgroundColor = data.team === 'blue' ? '#3b82f6' : '#ef4444';
+                }
+                el.style.left = `${data.x}%`;
+                el.style.top = `${data.y}%`;
+                el.addEventListener('pointerdown', (e) => onTokenDown(e, el));
+                tokensLayer.appendChild(el);
+            });
+        }
+
+        function onTokenDown(e, el) {
+            if (currentMode !== 'move') return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            // ダブルタップ判定 (300ms以内)
+            const now = Date.now();
+            if (now - lastTapTime < 300 && lastTapTarget === el) {
+                toggleSelectToken(el);
+                lastTapTime = 0;
+                return;
+            }
+            lastTapTime = now;
+            lastTapTarget = el;
+
+            // すでに選択された駒をタップした場合はリモートドラッグ開始
+            if (selectedToken === el) {
+                startRemoteDrag(e, el);
+                return;
+            }
+
+            // 通常のドラッグ
+            if (selectedToken) deselectToken();
+            el.setPointerCapture(e.pointerId);
+            activeToken = el;
+            el.classList.add('dragging'); // ここでフワッと上に浮く
+            
+            // 指の位置に合わせる
+            moveToken(e, activeToken);
+            el.addEventListener('pointermove', onTokenMove);
+            el.addEventListener('pointerup', onTokenUp);
+        }
+
+        function onTokenMove(e) {
+            if (!activeToken) return;
+            e.preventDefault();
+            moveToken(e, activeToken);
+        }
+
+        function onTokenUp(e) {
+            if (!activeToken) return;
+            activeToken.releasePointerCapture(e.pointerId);
+            activeToken.removeEventListener('pointermove', onTokenMove);
+            activeToken.removeEventListener('pointerup', onTokenUp);
+            activeToken.classList.remove('dragging');
+            activeToken = null;
+        }
+
+        function moveToken(e, token) {
+            const rect = container.getBoundingClientRect();
+            let px = ((e.clientX - rect.left) / rect.width) * 100;
+            let py = ((e.clientY - rect.top) / rect.height) * 100;
+            token.style.left = `${Math.max(0, Math.min(100, px))}%`;
+            token.style.top = `${Math.max(0, Math.min(100, py))}%`;
+        }
+
+        // --- リモートドラッグ（ダブルタップ後のスライド操作） ---
+        function toggleSelectToken(el) {
+            if (selectedToken === el) deselectToken();
+            else {
+                deselectToken();
+                selectedToken = el;
+                el.classList.add('selected');
+            }
+        }
+        function deselectToken() {
+            if (selectedToken) {
+                selectedToken.classList.remove('selected');
+                selectedToken = null;
+            }
+        }
+
+        function onLayerPointerDown(e) {
+            if (currentMode !== 'move') return;
+            if (e.target.closest('.token')) return;
+
+            // 何もない場所をダブルタップで選択解除
+            const now = Date.now();
+            if (now - lastTapTime < 300) {
+                deselectToken();
+                return;
+            }
+            lastTapTime = now;
+
+            // 駒選択中ならリモートドラッグ開始
+            if (selectedToken) {
+                e.preventDefault();
+                startRemoteDrag(e, tokensLayer);
+            }
+        }
+
+        function startRemoteDrag(e, captureTarget) {
+            captureTarget.setPointerCapture(e.pointerId);
+            remoteDrag = {
+                startX: e.clientX,
+                startY: e.clientY,
+                tokenStartX: parseFloat(selectedToken.style.left),
+                tokenStartY: parseFloat(selectedToken.style.top),
+                target: captureTarget
+            };
+            captureTarget.addEventListener('pointermove', onRemoteMove);
+            captureTarget.addEventListener('pointerup', onRemoteUp);
+        }
+
+        function onRemoteMove(e) {
+            if (!remoteDrag || !selectedToken) return;
+            e.preventDefault();
+            const rect = container.getBoundingClientRect();
+            // 移動した「差分」だけ駒を動かす
+            const dx = ((e.clientX - remoteDrag.startX) / rect.width) * 100;
+            const dy = ((e.clientY - remoteDrag.startY) / rect.height) * 100;
+            selectedToken.style.left = `${Math.max(0, Math.min(100, remoteDrag.tokenStartX + dx))}%`;
+            selectedToken.style.top = `${Math.max(0, Math.min(100, remoteDrag.tokenStartY + dy))}%`;
+        }
+
+        function onRemoteUp(e) {
+            if (!remoteDrag) return;
+            remoteDrag.target.releasePointerCapture(e.pointerId);
+            remoteDrag.target.removeEventListener('pointermove', onRemoteMove);
+            remoteDrag.target.removeEventListener('pointerup', onRemoteUp);
+            remoteDrag = null;
+        }
+
+
+        // --- モード＆UI切替 ---
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('#mode-move, #mode-draw, #mode-erase').forEach(b => b.classList.remove('active'));
+            document.getElementById(`mode-${mode}`).classList.add('active');
+
+            const settingTools = document.getElementById('setting-tools');
+            const drawTools = document.getElementById('draw-tools');
+
+            if (mode === 'move') {
+                settingTools.style.display = 'flex';
+                drawTools.style.display = 'none';
+                tokensLayer.style.pointerEvents = 'auto';
+                canvas.style.pointerEvents = 'none';
+                canvas.style.zIndex = '20';
+            } else {
+                settingTools.style.display = 'none';
+                drawTools.style.display = 'flex';
+                tokensLayer.style.pointerEvents = 'none';
+                canvas.style.pointerEvents = 'auto';
+                canvas.style.zIndex = '40';
+            }
+        }
+
+        function setPenColor(color, btn) {
+            penColor = color;
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active', 'black-active'));
+            btn.classList.add('active');
+            if(color === '#0f172a') btn.classList.add('black-active');
+        }
+
+        function setLineStyle(style, btn) {
+            lineStyle = style;
+            document.querySelectorAll('#draw-tools > button[id^="style-"]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function toggleCourtColor() {
+            isWood = !isWood;
+            const btn = document.getElementById('btn-court');
+            const paints = document.querySelectorAll('.paint-area');
+            if (isWood) {
+                container.style.backgroundColor = '#d28c4b'; // 木目
+                paints.forEach(p => p.setAttribute('fill', '#c47a39'));
+                btn.innerText = '床: 木目';
+            } else {
+                container.style.backgroundColor = '#fef08a'; // 薄黄色
+                paints.forEach(p => p.setAttribute('fill', '#fde047'));
+                btn.innerText = '床: 黄色';
+            }
+        }
+
+        function toggleLineColor() {
+            isWhiteLine = !isWhiteLine;
+            const btn = document.getElementById('btn-line');
+            const svg = document.getElementById('courtSvg');
+            const rings = document.querySelectorAll('.ring');
+            
+            if (isWhiteLine) {
+                svg.style.stroke = '#ffffff';
+                rings.forEach(r => r.setAttribute('stroke', '#fb923c'));
+                btn.innerText = '線: 白';
+            } else {
+                svg.style.stroke = '#0f172a';
+                rings.forEach(r => r.setAttribute('stroke', '#ea580c'));
+                btn.innerText = '線: 黒';
+            }
+        }
+
+        // --- 描画＆消しゴム処理 ---
+        function setupDrawingEvents() {
+            canvas.addEventListener('pointerdown', (e) => {
+                if (currentMode === 'erase') {
+                    e.preventDefault();
+                    canvas.setPointerCapture(e.pointerId);
+                    hitTestPath(e);
+                    return;
+                }
+                if (currentMode !== 'draw') return;
+                e.preventDefault();
+                canvas.setPointerCapture(e.pointerId);
+                currentPath = { color: penColor, style: lineStyle, points: [getPos(e)] };
+            });
+
+            canvas.addEventListener('pointermove', (e) => {
+                if (currentMode === 'erase' && canvas.hasPointerCapture(e.pointerId)) {
+                    e.preventDefault();
+                    hitTestPath(e);
+                    return;
+                }
+                if (currentMode !== 'draw' || !currentPath) return;
+                e.preventDefault();
+                const pos = getPos(e);
+                const lastPos = currentPath.points[currentPath.points.length - 1];
+                if (Math.hypot(pos.x - lastPos.x, pos.y - lastPos.y) > 0.005) { 
+                    currentPath.points.push(pos);
+                    redrawCanvas();
+                    drawPath(currentPath);
+                }
+            });
+
+            const finishDraw = (e) => {
+                canvas.releasePointerCapture(e.pointerId);
+                if (currentMode === 'draw' && currentPath) {
+                    if (currentPath.points.length > 1) paths.push(currentPath);
+                    currentPath = null;
+                    redrawCanvas();
+                }
+            };
+            canvas.addEventListener('pointerup', finishDraw);
+            canvas.addEventListener('pointercancel', finishDraw);
+        }
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+        }
+
+        function redrawCanvas() {
+            if (!canvas.cssWidth) return;
+            ctx.clearRect(0, 0, canvas.cssWidth, canvas.cssHeight);
+            paths.forEach(p => drawPath(p));
+        }
+
+        function drawPath(path) {
+            if (path.points.length < 2) return;
+            const w = canvas.cssWidth, h = canvas.cssHeight;
+            
+            ctx.beginPath();
+            ctx.strokeStyle = path.color;
+            ctx.lineWidth = 3.5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.setLineDash(path.style.includes('dotted') ? [10, 10] : []);
+            
+            ctx.moveTo(path.points[0].x * w, path.points[0].y * h);
+            for (let i = 1; i < path.points.length; i++) ctx.lineTo(path.points[i].x * w, path.points[i].y * h);
+            ctx.stroke();
+
+            // 矢印の先端
+            if (path.style.includes('arrow')) {
+                ctx.setLineDash([]); 
+                const p2 = path.points[path.points.length - 1];
+                const p1 = path.points[Math.max(0, path.points.length - 3)]; 
+                const angle = Math.atan2((p2.y - p1.y) * h, (p2.x - p1.x) * w);
+                const headLen = 16; 
+                
+                ctx.beginPath();
+                ctx.fillStyle = path.color;
+                ctx.moveTo(p2.x * w, p2.y * h);
+                ctx.lineTo(p2.x * w - headLen * Math.cos(angle - Math.PI / 6), p2.y * h - headLen * Math.sin(angle - Math.PI / 6));
+                ctx.lineTo(p2.x * w - headLen * Math.cos(angle + Math.PI / 6), p2.y * h - headLen * Math.sin(angle + Math.PI / 6));
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        // 線当たり判定 (消しゴム)
+        function hitTestPath(e) {
+            const pos = getPos(e);
+            const w = canvas.cssWidth, h = canvas.cssHeight;
+            const px = pos.x * w, py = pos.y * h;
+            for (let i = paths.length - 1; i >= 0; i--) {
+                const path = paths[i];
+                let hit = false;
+                for (let j = 0; j < path.points.length - 1; j++) {
+                    const p1 = { x: path.points[j].x * w, y: path.points[j].y * h };
+                    const p2 = { x: path.points[j+1].x * w, y: path.points[j+1].y * h };
+                    // 線分と点の距離
+                    const l2 = (p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2;
+                    let t = l2 === 0 ? 0 : ((px - p1.x) * (p2.x - p1.x) + (py - p1.y) * (p2.y - p1.y)) / l2;
+                    t = Math.max(0, Math.min(1, t));
+                    const dist = Math.hypot(px - (p1.x + t * (p2.x - p1.x)), py - (p1.y + t * (p2.y - p1.y)));
+                    
+                    if (dist < 20) { hit = true; break; } // 当たり判定の太さ(20px)
+                }
+                if (hit) { paths.splice(i, 1); redrawCanvas(); break; }
+            }
+        }
+
+        function undoPath() { paths.pop(); redrawCanvas(); }
+        function clearCanvas() { paths = []; redrawCanvas(); }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
