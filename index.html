@@ -236,22 +236,22 @@
   let drawings = [];
   let currentStroke = null;
 
-  // 初期配置定義（割合 0.0〜1.0）
+ // 初期配置定義（割合 0.0〜1.0）
   const defaultPositions = [
     // 赤チーム
-    { id: 'r1', team: 'red', num: '1', x: 0.58, y: 0.63 },
-    { id: 'r2', team: 'red', num: '2', x: 0.44, y: 0.48 },
-    { id: 'r3', team: 'red', num: '3', x: 0.45, y: 0.72 },
-    { id: 'r4', team: 'red', num: '4', x: 0.32, y: 0.83 },
-    { id: 'r5', team: 'red', num: '5', x: 0.35, y: 0.67 },
+    { id: 'r1', team: 'red', num: '1', x: 0.338, y: 0.420 },
+    { id: 'r2', team: 'red', num: '2', x: 0.205, y: 0.252 },
+    { id: 'r3', team: 'red', num: '3', x: 0.254, y: 0.710 },
+    { id: 'r4', team: 'red', num: '4', x: 0.165, y: 0.810 },
+    { id: 'r5', team: 'red', num: '5', x: 0.170, y: 0.575 },
     // 青チーム
-    { id: 'b1', team: 'blue', num: '1', x: 0.64, y: 0.64 },
-    { id: 'b2', team: 'blue', num: '2', x: 0.50, y: 0.39 },
-    { id: 'b3', team: 'blue', num: '3', x: 0.56, y: 0.84 },
-    { id: 'b4', team: 'blue', num: '4', x: 0.29, y: 0.90 },
-    { id: 'b5', team: 'blue', num: '5', x: 0.34, y: 0.75 },
+    { id: 'b1', team: 'blue', num: '1', x: 0.405, y: 0.410 },
+    { id: 'b2', team: 'blue', num: '2', x: 0.228, y: 0.095 },
+    { id: 'b3', team: 'blue', num: '3', x: 0.268, y: 0.885 },
+    { id: 'b4', team: 'blue', num: '4', x: 0.133, y: 0.940 },
+    { id: 'b5', team: 'blue', num: '5', x: 0.152, y: 0.705 },
     // ボール
-    { id: 'ball', team: 'ball', num: '', x: 0.62, y: 0.59 }
+    { id: 'ball', team: 'ball', num: '', x: 0.380, y: 0.360 }
   ];
 
   let pieces = JSON.parse(JSON.stringify(defaultPositions));
